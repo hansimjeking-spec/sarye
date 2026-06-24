@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>사례관리 업무도구</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" role="img">
+            <rect x="6" y="8" width="36" height="32" rx="6"></rect>
+            <path d="M15 18h18M15 25h12M15 32h16"></path>
+            <circle cx="35" cy="31" r="4"></circle>
+          </svg>
+        </div>
+        <div>
+          <h1>사례관리</h1>
+          <p>대상자·사업·과정기록 업무도구</p>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="주요 보기">
+        <button class="nav-button active" data-view="dashboard" type="button"><span class="icon">▦</span>대시보드</button>
+        <button class="nav-button" data-view="entry" type="button"><span class="icon">＋</span>실적 입력</button>
+        <button class="nav-button" data-view="clients" type="button"><span class="icon">◎</span>대상자</button>
+        <button class="nav-button" data-view="process" type="button"><span class="icon">▤</span>과정기록지</button>
+        <button class="nav-button" data-view="clientStats" type="button"><span class="icon">◫</span>대상자 통계</button>
+        <button class="nav-button" data-view="programs" type="button"><span class="icon">◇</span>사업 관리</button>
+        <button class="nav-button" data-view="import" type="button"><span class="icon">⇅</span>가져오기/내보내기</button>
+      </nav>
+
+      <div class="side-note">
+        <strong>최소수집 원칙</strong>
+        <span>업무상 필요한 항목만 입력하고, 보고서 내보내기 전 개인정보 포함 여부를 확인하세요.</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="period-control">
+          <label for="yearSelect">기준연도</label>
+          <select id="yearSelect"></select>
+          <label for="monthSelect">기준월</label>
+          <select id="monthSelect"></select>
+        </div>
+        <div class="top-actions">
+          <button class="ghost-button" id="toggleMask" type="button">개인정보 마스킹</button>
+          <button class="ghost-button" id="printReport" type="button">보고서 인쇄</button>
+        </div>
+      </header>
+
+      <section class="view active" id="dashboardView" aria-labelledby="dashboardTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="dashboardTitle">사업별 월별 실적 현황</h2>
+            <p>사업별 해당 대상자를 기준으로 실인원, 연인원, 남/여 현황을 확인합니다.</p>
+          </div>
+          <div class="filter-row">
+            <label for="managerFilter">담당자</label>
+            <select id="managerFilter"><option value="all">전체</option></select>
+            <label for="categoryFilter">분류</label>
+            <select id="categoryFilter"><option value="all">전체</option></select>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric"><span>실인원</span><strong id="totalActual">0</strong></article>
+          <article class="metric"><span>연인원</span><strong id="goalRate">0</strong></article>
+          <article class="metric"><span>남</span><strong id="monthGoalRate">0</strong></article>
+          <article class="metric alert"><span>여</span><strong id="missingProgramCount">0</strong></article>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>월별 합계</h3>
+              <button class="text-button" id="copyMonthlySummary" type="button">표 복사</button>
+            </div>
+            <div class="chart-wrap"><div class="chart" id="monthlyChart" aria-label="월별 실적 막대그래프"></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>이번 달 미입력</h3>
+              <button class="text-button" id="copyMissingList" type="button">목록 복사</button>
+            </div>
+            <div class="check-list" id="missingList"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>사업별 집계표</h3>
+            <div class="table-tools">
+              <input id="searchInput" type="search" placeholder="사업명 검색">
+              <button class="text-button" id="exportSummaryCsv" type="button">CSV</button>
+              <button class="text-button" id="exportSummaryExcel" type="button">Excel</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr id="summaryHead"></tr></thead>
+              <tbody id="summaryBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="entryView" aria-labelledby="entryTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="entryTitle">실적 입력</h2>
+            <p>중복 입력은 저장 전 확인합니다.</p>
+          </div>
+        </div>
+
+        <form class="form-grid panel wide-form" id="entryForm">
+          <label>사업<select id="entryProgram" required></select></label>
+          <label>월<select id="entryMonth" required></select></label>
+          <label>대상자<select id="entryClient"></select></label>
+          <label>실적<input id="entryActual" type="number" min="0" step="1" required></label>
+          <label>내부 메모<input id="entryMemo" type="text" maxlength="100" placeholder="선택 입력"></label>
+          <div class="checkbox-stack">
+            <label class="inline-check"><input id="entryOverwrite" type="checkbox"> 같은 사업·월 기존값 덮어쓰기</label>
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">저장</button>
+            <button class="ghost-button" id="clearEntry" type="button">비우기</button>
+          </div>
+        </form>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>최근 입력</h3>
+            <button class="text-button danger" id="deleteSelectedEntries" type="button">선택 삭제</button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th><input id="selectAllEntries" type="checkbox" aria-label="전체 선택"></th>
+                  <th>사업</th><th>월</th><th>대상자</th><th>실적</th><th>메모</th><th>입력일</th>
+                </tr>
+              </thead>
+              <tbody id="entryRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="clientsView" aria-labelledby="clientsTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="clientsTitle">대상자 관리</h2>
+            <p>대상자 기본정보, 가구 구성원, 가계도와 생태도를 함께 관리합니다.</p>
+          </div>
+        </div>
+
+        <form class="form-grid panel wide-form" id="clientForm">
+          <input id="clientId" type="hidden">
+          <label>대상자명<input id="clientName" type="text" required placeholder="예: 홍길동"></label>
+          <label>출생연도<input id="clientBirthYear" type="number" min="1900" max="2100"></label>
+          <label>성별<select id="clientGender"><option value="">미입력</option><option>여</option><option>남</option><option>기타/미상</option></select></label>
+          <label>거주지역<input id="clientArea" type="text" placeholder="예: ○○동, ○○구"></label>
+          <label>주거형태<select id="clientHousing"><option value="">미입력</option><option>자가</option><option>전세</option><option>월세</option><option>공공임대</option><option>고시원/쪽방</option><option>시설/쉼터</option><option>노숙/불안정</option><option>기타</option></select></label>
+          <label>경제상황<select id="clientEconomic"><option value="">미입력</option><option>기초생활수급</option><option>차상위</option><option>중위소득 50% 이하</option><option>저소득</option><option>일반</option><option>소득 없음</option><option>부채/체납</option><option>확인 필요</option></select></label>
+          <label>가구유형<select id="clientHousehold"><option value="">미입력</option><option>1인가구</option><option>한부모</option><option>조손가구</option><option>장애인가구</option><option>노인가구</option><option>다문화가구</option><option>일반가구</option><option>기타</option></select></label>
+          <label>의뢰일<input id="clientConsentDate" type="date"></label>
+          <label>담당자<input id="clientWorker" type="text" placeholder="담당자명"></label>
+          <label class="full-span">가구 구성원<textarea id="clientFamilyMembers" rows="3" placeholder="예: 배우자 / 75세 / 동거 / 당뇨로 병원 이용&#10;장녀 / 48세 / 비동거 / 월 1회 연락"></textarea></label>
+          <label>가계도 파일<input id="clientGenogramFile" type="file" accept="image/*,.pdf"></label>
+          <label>생태도 파일<input id="clientEcomapFile" type="file" accept="image/*,.pdf"></label>
+          <div class="attachment-preview full-span" id="clientAttachmentPreview"></div>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">대상자 저장</button>
+            <button class="ghost-button" id="resetClientForm" type="button">새 대상자</button>
+          </div>
+        </form>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>대상자 목록</h3>
+            <input id="clientSearch" type="search" placeholder="이름/담당자 검색">
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>대상자</th><th>성별</th><th>거주지역</th><th>경제상황</th><th>가구유형</th><th>가구 구성원</th><th>가계도/생태도</th><th>담당자</th><th>관리</th></tr></thead>
+              <tbody id="clientRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="processView" aria-labelledby="processTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="processTitle">과정기록지</h2>
+            <p>월별 전화/방문 안부확인과 특이사항을 대상자별로 정리합니다.</p>
+          </div>
+          <div class="filter-row">
+            <label for="processClientFilter">대상자</label>
+            <select id="processClientFilter"></select>
+            <label for="processMethodFilter">방법</label>
+            <select id="processMethodFilter">
+              <option value="all">전체</option>
+              <option>전화</option>
+              <option>방문</option>
+              <option>내방</option>
+              <option>문자/메신저</option>
+              <option>기타</option>
+            </select>
+          </div>
+        </div>
+
+        <form class="form-grid panel wide-form" id="processForm">
+          <input id="processId" type="hidden">
+          <label>대상자<select id="processClient" required></select></label>
+          <label>확인일<input id="processDate" type="date" required></label>
+          <label>확인방법<select id="processMethod" required><option>전화</option><option>방문</option><option>내방</option><option>문자/메신저</option><option>기타</option></select></label>
+          <label>안부상태<select id="processStatus"><option>양호</option><option>관찰 필요</option><option>위기 징후</option><option>연락 안 됨</option><option>추후 확인</option></select></label>
+          <label class="full-span">특이사항<textarea id="processNote" rows="3" maxlength="600" placeholder="건강, 식사, 주거, 정서, 가족관계, 긴급지원 필요 여부 등을 간단히 기록"></textarea></label>
+          <label class="full-span">후속조치<textarea id="processFollowUp" rows="2" maxlength="400" placeholder="예: 다음 주 재방문, 의료비 상담 연계, 후원물품 확인"></textarea></label>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">기록 저장</button>
+            <button class="ghost-button" id="resetProcessForm" type="button">새 기록</button>
+          </div>
+        </form>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>대상자별 기록</h3>
+              <button class="text-button" id="exportProcessCsv" type="button">CSV</button>
+            </div>
+            <div class="process-timeline" id="processTimeline"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>월별 확인 현황</h3>
+              <button class="text-button" id="copyProcessMissing" type="button">미확인 복사</button>
+            </div>
+            <div class="check-list" id="processMonthlyStatus"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>최근 과정기록</h3>
+            <button class="text-button danger" id="deleteSelectedProcessRecords" type="button">선택 삭제</button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th><input id="selectAllProcessRecords" type="checkbox" aria-label="전체 선택"></th><th>대상자</th><th>확인일</th><th>방법</th><th>상태</th><th>특이사항</th><th>후속조치</th><th>관리</th></tr></thead>
+              <tbody id="processRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="clientStatsView" aria-labelledby="clientStatsTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="clientStatsTitle">사례관리 대상자 통계</h2>
+            <p>식별정보를 제외하고 성별, 거주지역, 경제상황 등 대상자 속성을 집계합니다.</p>
+          </div>
+          <div class="filter-row">
+            <label for="clientStatsWorkerFilter">담당자</label>
+            <select id="clientStatsWorkerFilter"><option value="all">전체</option></select>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric"><span>대상자 수</span><strong id="clientStatsTotal">0</strong></article>
+          <article class="metric"><span>가구 구성원 기록</span><strong id="clientStatsFamily">0</strong></article>
+          <article class="metric alert"><span>미기재 항목</span><strong id="clientStatsMissing">0</strong></article>
+        </div>
+
+        <div class="stats-grid">
+          <div class="panel"><div class="panel-head"><h3>성별</h3></div><div class="stat-bars" id="genderStats"></div></div>
+          <div class="panel"><div class="panel-head"><h3>연령대</h3></div><div class="stat-bars" id="ageStats"></div></div>
+          <div class="panel"><div class="panel-head"><h3>거주지역</h3></div><div class="stat-bars" id="areaStats"></div></div>
+          <div class="panel"><div class="panel-head"><h3>경제상황</h3></div><div class="stat-bars" id="economicStats"></div></div>
+          <div class="panel"><div class="panel-head"><h3>주거형태</h3></div><div class="stat-bars" id="housingStats"></div></div>
+          <div class="panel"><div class="panel-head"><h3>가구유형</h3></div><div class="stat-bars" id="householdStats"></div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>대상자 통계표</h3>
+            <div class="table-tools">
+              <button class="text-button" id="copyClientStats" type="button">표 복사</button>
+              <button class="text-button" id="exportClientStatsCsv" type="button">CSV</button>
+              <button class="text-button" id="exportClientStatsExcel" type="button">Excel</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>구분</th><th>항목</th><th>인원</th><th>비율</th></tr></thead>
+              <tbody id="clientStatsRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="programsView" aria-labelledby="programsTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="programsTitle">사업 관리</h2>
+            <p>사업별 담당자와 해당 대상자를 등록합니다.</p>
+          </div>
+        </div>
+
+        <form class="form-grid panel wide-form" id="programForm">
+          <input id="programId" type="hidden">
+          <label>사업명<input id="programName" type="text" required placeholder="예: 사례관리 상담"></label>
+          <label>분류<input id="programCategory" type="text" required placeholder="예: 사례관리"></label>
+          <label>담당자<input id="programManager" type="text" placeholder="예: 김사회"></label>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">사업 저장</button>
+            <button class="ghost-button" id="resetProgramForm" type="button">새 사업</button>
+          </div>
+        </form>
+
+        <div class="program-list" id="programList"></div>
+      </section>
+
+      <section class="view" id="importView" aria-labelledby="importTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="importTitle">가져오기/내보내기</h2>
+            <p>Excel에서 붙여넣기, CSV 가져오기, Excel 호환 파일 내보내기, 백업/복원을 지원합니다.</p>
+          </div>
+        </div>
+        <div class="split">
+          <div class="panel">
+            <h3>CSV 가져오기</h3>
+            <p class="help-text">열 이름: 사업명, 분류, 담당자, 연도, 월, 실적, 대상자명, 출생연도, 성별, 거주지역, 주거형태, 경제상황, 가구유형, 가구구성원, 메모</p>
+            <input id="csvFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
+            <div class="button-row">
+              <button class="primary-button" id="importCsv" type="button">가져오기</button>
+              <button class="ghost-button" id="downloadTemplate" type="button">양식 다운로드</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Excel 붙여넣기</h3>
+            <p class="help-text">엑셀 표를 복사한 뒤 아래에 붙여넣으면 탭 구분 자료로 가져옵니다.</p>
+            <textarea id="excelPaste" rows="8" placeholder="엑셀에서 복사한 표를 붙여넣기"></textarea>
+            <button class="primary-button" id="importPastedExcel" type="button">붙여넣은 표 가져오기</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>백업/복원 및 보고서</h3>
+          <div class="export-options">
+            <label class="inline-check"><input id="includePersonalExport" type="checkbox"> 내보내기에 개인정보 포함</label>
+          </div>
+          <div class="button-row">
+            <button class="ghost-button" id="exportJson" type="button">JSON 백업</button>
+            <button class="ghost-button" id="restoreJsonButton" type="button">JSON 복원</button>
+            <input id="restoreJsonFile" type="file" accept="application/json,.json" hidden>
+            <button class="ghost-button" id="exportAllCsv" type="button">전체 CSV</button>
+            <button class="ghost-button" id="exportAllExcel" type="button">전체 Excel</button>
+            <button class="danger-button" id="resetAll" type="button">전체 초기화</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
