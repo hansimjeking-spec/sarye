@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>사례관리 업무도구</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260628-genogram">
 </head>
 <body>
   <div class="app-shell">
@@ -375,7 +375,27 @@
     </main>
   </div>
 
+  <dialog class="genogram-dialog" id="genogramDialog" aria-labelledby="genogramTitle">
+    <div class="genogram-dialog-head">
+      <div>
+        <h3 id="genogramTitle">자동 가계도</h3>
+        <p id="genogramSummary"></p>
+      </div>
+      <button class="icon-button" id="closeGenogram" type="button" aria-label="가계도 닫기" title="닫기">×</button>
+    </div>
+    <div class="genogram-canvas" id="genogramCanvas"></div>
+    <div class="genogram-legend" aria-label="가계도 기호">
+      <span><i class="legend-square"></i>남성</span>
+      <span><i class="legend-circle"></i>여성</span>
+      <span><i class="legend-double"></i>대상자</span>
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" id="saveGenogram" type="button">가계도로 저장</button>
+      <button class="ghost-button" id="downloadGenogram" type="button">SVG 내려받기</button>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=20260628-genogram"></script>
 </body>
 </html>

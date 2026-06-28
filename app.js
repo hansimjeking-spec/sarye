@@ -7,6 +7,8 @@ const nowYear = now.getFullYear();
 let selectedYear = nowYear;
 let selectedMonth = now.getMonth() + 1;
 let state = loadState();
+let activeGenogramClientId = "";
+let activeGenogramSvg = "";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -179,6 +181,9 @@ function normalizeClient(client) {
     consentDate: client.consentDate || "",
     worker: client.worker || "",
     familyMembers: client.familyMembers || "",
+    familyRelations: Array.isArray(client.familyRelations)
+      ? client.familyRelations.map(normalizeFamilyRelation)
+      : [],
     genogramFile: client.genogramFile || null,
     ecomapFile: client.ecomapFile || null,
     sensitive: Boolean(client.sensitive)
@@ -244,6 +249,7 @@ function initElementMap() {
     "programForm", "programId", "programName", "programCategory", "programManager",
     "programList",
     "csvFile", "excelPaste", "googleSheetPaste", "includePersonalExport", "restoreJsonFile",
+    "genogramDialog", "genogramTitle", "genogramSummary", "genogramCanvas",
     "toast"
   ].forEach((id) => { elements[id] = $(`#${id}`); });
 }
@@ -295,6 +301,9 @@ function bindEvents() {
   elements.clientStatsWorkerFilter.addEventListener("change", renderClientStats);
   elements.clientGenogramFile.addEventListener("change", renderPendingAttachmentPreview);
   elements.clientEcomapFile.addEventListener("change", renderPendingAttachmentPreview);
+  $("#closeGenogram").addEventListener("click", closeGenogram);
+  $("#saveGenogram").addEventListener("click", saveGeneratedGenogram);
+  $("#downloadGenogram").addEventListener("click", downloadGeneratedGenogram);
 
   elements.processForm.addEventListener("submit", saveProcessRecord);
   $("#resetProcessForm").addEventListener("click", resetProcessForm);
@@ -590,12 +599,14 @@ function renderClients() {
         <td>${attachmentBadges(client)}</td>
         <td>${escapeHtml(client.worker || "")}</td>
         <td>
+          <button class="text-button" data-genogram-client="${client.id}" type="button">가계도</button>
           <button class="text-button" data-edit-client="${client.id}" type="button">수정</button>
           <button class="text-button danger" data-delete-client="${client.id}" type="button">삭제</button>
         </td>
       </tr>
     `;
   }).join("");
+  $$("[data-genogram-client]").forEach((button) => button.addEventListener("click", () => openGenogram(button.dataset.genogramClient)));
   $$("[data-edit-client]").forEach((button) => button.addEventListener("click", () => editClient(button.dataset.editClient)));
   $$("[data-delete-client]").forEach((button) => button.addEventListener("click", () => deleteClient(button.dataset.deleteClient)));
 }
@@ -861,6 +872,7 @@ async function saveClient(event) {
     consentDate: elements.clientConsentDate.value,
     worker: elements.clientWorker.value.trim(),
     familyMembers: elements.clientFamilyMembers.value.trim(),
+    familyRelations: previous?.familyRelations || [],
     genogramFile: await fileInputToAttachment(elements.clientGenogramFile, previous?.genogramFile || null),
     ecomapFile: await fileInputToAttachment(elements.clientEcomapFile, previous?.ecomapFile || null),
     sensitive: false
@@ -1200,17 +1212,31 @@ function importGoogleSheetClients() {
 
     if (!sequence) {
       if (!currentClient || !familyName || relation === "본인") return;
-      const familyLine = [
-        familyName,
-        valueAt(row, "성별"),
+      const familyRelation = normalizeFamilyRelation({
+        name: familyName,
+        gender: valueAt(row, "성별"),
         relation,
-        valueAt(row, "연령") ? `${valueAt(row, "연령")}세` : ""
+        birthYear: valueAt(row, "생년월일").match(/^\d{4}/)?.[0] || "",
+        age: valueAt(row, "연령")
+      });
+      const familyLine = [
+        familyRelation.name,
+        familyRelation.gender,
+        familyRelation.relation,
+        familyRelation.age ? `${familyRelation.age}세` : ""
       ].filter(Boolean).join(" / ");
       const members = currentClient.familyMembers
         ? currentClient.familyMembers.split("\n")
         : [];
       if (familyLine && !members.includes(familyLine)) {
         currentClient.familyMembers = [...members, familyLine].join("\n");
+      }
+      if (!currentClient.familyRelations.some((item) => (
+        item.name === familyRelation.name
+        && item.relation === familyRelation.relation
+        && item.birthYear === familyRelation.birthYear
+      ))) {
+        currentClient.familyRelations.push(familyRelation);
       }
       return;
     }
@@ -1243,6 +1269,8 @@ function importGoogleSheetClients() {
       Object.entries(sheetValues).forEach(([key, value]) => {
         if (value !== "") client[key] = value;
       });
+      client.familyMembers = "";
+      client.familyRelations = [];
       updated += 1;
     } else {
       client = normalizeClient({
@@ -1250,6 +1278,7 @@ function importGoogleSheetClients() {
         consentDate: "",
         worker: "",
         familyMembers: "",
+        familyRelations: [],
         genogramFile: null,
         ecomapFile: null
       });
@@ -1304,6 +1333,200 @@ function normalizeSheetHousehold(value) {
   if (value.includes("노인") || value.includes("부부")) return "노인가구";
   if (value.includes("다문화")) return "다문화가구";
   return "일반가구";
+}
+
+function normalizeFamilyRelation(person) {
+  return {
+    name: String(person?.name || "").trim(),
+    gender: String(person?.gender || "").trim(),
+    relation: String(person?.relation || "").trim(),
+    birthYear: String(person?.birthYear || "").trim(),
+    age: String(person?.age || "").replace(/[^\d]/g, "")
+  };
+}
+
+function familyRelationsFor(client) {
+  if (client.familyRelations?.length) return client.familyRelations.map(normalizeFamilyRelation);
+  return String(client.familyMembers || "")
+    .split("\n")
+    .map((line) => {
+      const [name = "", gender = "", relation = "", age = ""] = line.split("/").map((part) => part.trim());
+      return normalizeFamilyRelation({ name, gender, relation, age });
+    })
+    .filter((person) => person.name);
+}
+
+function openGenogram(clientId) {
+  const client = findClient(clientId);
+  if (!client) return;
+  const family = familyRelationsFor(client);
+  activeGenogramClientId = client.id;
+  activeGenogramSvg = buildGenogramSvg(client, family);
+  elements.genogramTitle.textContent = `${client.name} 가계도`;
+  elements.genogramSummary.textContent = family.length
+    ? `시트에서 확인된 가족 ${family.length}명 기준`
+    : "가족관계 자료가 없어 대상자만 표시";
+  elements.genogramCanvas.innerHTML = activeGenogramSvg;
+  elements.genogramDialog.showModal();
+}
+
+function closeGenogram() {
+  elements.genogramDialog.close();
+}
+
+function saveGeneratedGenogram() {
+  const client = findClient(activeGenogramClientId);
+  if (!client || !activeGenogramSvg) return;
+  client.genogramFile = {
+    name: `${safeFilename(client.name)}_가계도.svg`,
+    type: "image/svg+xml",
+    dataUrl: svgDataUrl(activeGenogramSvg)
+  };
+  saveState("자동 가계도 저장", client.name);
+  renderAll();
+  if (elements.clientId.value === client.id) renderClientAttachmentPreview(client);
+  showToast("자동 가계도를 대상자 첨부에 저장했습니다.");
+}
+
+function downloadGeneratedGenogram() {
+  const client = findClient(activeGenogramClientId);
+  if (!client || !activeGenogramSvg) return;
+  downloadBlob(
+    `${safeFilename(client.name)}_가계도.svg`,
+    new Blob([activeGenogramSvg], { type: "image/svg+xml;charset=utf-8" })
+  );
+}
+
+function svgDataUrl(svg) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function safeFilename(value) {
+  return String(value || "대상자").replace(/[\\/:*?"<>|]/g, "_");
+}
+
+function buildGenogramSvg(client, family) {
+  const parents = family.filter((person) => relationGroup(person.relation) === "parent");
+  const siblings = family.filter((person) => relationGroup(person.relation) === "sibling");
+  const spouses = family.filter((person) => relationGroup(person.relation) === "spouse");
+  const children = family.filter((person) => relationGroup(person.relation) === "child");
+  const others = family.filter((person) => relationGroup(person.relation) === "other");
+  const spouse = spouses[0] || null;
+  const additional = [...spouses.slice(1), ...others];
+  const middle = [
+    ...siblings,
+    {
+      name: client.name,
+      gender: client.gender,
+      relation: "본인",
+      birthYear: client.birthYear,
+      isFocus: true
+    },
+    ...(spouse ? [spouse] : [])
+  ];
+
+  const gap = 180;
+  const margin = 100;
+  const width = Math.max(760, margin * 2 + (Math.max(middle.length, children.length, additional.length, 3) - 1) * gap);
+  const height = additional.length ? 760 : 610;
+  const middleY = 285;
+  const childY = 480;
+  const additionalY = 665;
+  const middleNodes = centeredNodes(middle, width, middleY, gap);
+  const targetNode = middleNodes.find((node) => node.person.isFocus);
+  const spouseNode = spouse ? middleNodes[middleNodes.length - 1] : null;
+  const parentNodes = centeredNodes(parents, width, 90, gap);
+  const childNodes = centeredNodes(children, width, childY, gap);
+  const additionalNodes = centeredNodes(additional, width, additionalY, gap);
+  const lines = [];
+
+  const familyChildren = middleNodes.filter((node) => !spouseNode || node !== spouseNode);
+  if (parentNodes.length && familyChildren.length) {
+    const parentCenter = parentNodes.length === 1
+      ? parentNodes[0].x
+      : (parentNodes[0].x + parentNodes[parentNodes.length - 1].x) / 2;
+    if (parentNodes.length > 1) {
+      lines.push(svgLine(parentNodes[0].x + 64, 145, parentNodes[parentNodes.length - 1].x - 64, 145));
+    }
+    const siblingLineY = 210;
+    const firstChildX = familyChildren[0].x;
+    const lastChildX = familyChildren[familyChildren.length - 1].x;
+    lines.push(svgLine(parentCenter, 145, parentCenter, siblingLineY));
+    lines.push(svgLine(firstChildX, siblingLineY, lastChildX, siblingLineY));
+    familyChildren.forEach((node) => lines.push(svgLine(node.x, siblingLineY, node.x, middleY - 58)));
+  }
+
+  if (spouseNode && targetNode) {
+    lines.push(svgLine(targetNode.x + 58, middleY, spouseNode.x - 58, middleY));
+  }
+
+  if (childNodes.length && targetNode) {
+    const coupleCenter = spouseNode ? (targetNode.x + spouseNode.x) / 2 : targetNode.x;
+    const childLineY = 405;
+    lines.push(svgLine(coupleCenter, middleY, coupleCenter, childLineY));
+    lines.push(svgLine(childNodes[0].x, childLineY, childNodes[childNodes.length - 1].x, childLineY));
+    childNodes.forEach((node) => lines.push(svgLine(node.x, childLineY, node.x, childY - 58)));
+  }
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(client.name)} 가계도">
+      <style>
+        .line{stroke:#4b5357;stroke-width:3;fill:none}
+        .symbol{stroke:#4b5357;stroke-width:3;fill:#fff}
+        .focus{stroke:#0f766e;stroke-width:4;fill:#eef7f4}
+        .inner{stroke:#0f766e;stroke-width:2.5;fill:none}
+        .name{fill:#182125;font:700 20px "Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+        .meta{fill:#6b7780;font:16px "Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+        .section-label{fill:#6b7780;font:700 16px "Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+      </style>
+      <rect width="100%" height="100%" fill="#fff"/>
+      ${lines.join("")}
+      ${additionalNodes.length ? `<text x="${width / 2}" y="590" text-anchor="middle" class="section-label">기타 가족관계</text>` : ""}
+      ${[...parentNodes, ...middleNodes, ...childNodes, ...additionalNodes].map(svgPersonNode).join("")}
+    </svg>
+  `.trim();
+}
+
+function centeredNodes(people, width, y, gap) {
+  if (!people.length) return [];
+  const startX = (width - (people.length - 1) * gap) / 2;
+  return people.map((person, index) => ({ person, x: startX + index * gap, y }));
+}
+
+function svgLine(x1, y1, x2, y2) {
+  return `<path class="line" d="M${x1} ${y1} L${x2} ${y2}"/>`;
+}
+
+function svgPersonNode(node) {
+  const { person, x, y } = node;
+  const isFemale = String(person.gender).includes("여");
+  const isFocus = Boolean(person.isFocus);
+  const symbol = isFemale
+    ? `<circle class="${isFocus ? "symbol focus" : "symbol"}" cx="${x}" cy="${y}" r="58"/>`
+    : `<rect class="${isFocus ? "symbol focus" : "symbol"}" x="${x - 58}" y="${y - 58}" width="116" height="116" rx="6"/>`;
+  const inner = !isFocus ? "" : isFemale
+    ? `<circle class="inner" cx="${x}" cy="${y}" r="49"/>`
+    : `<rect class="inner" x="${x - 49}" y="${y - 49}" width="98" height="98" rx="4"/>`;
+  const displayName = person.name || person.relation || "미상";
+  const meta = person.birthYear
+    ? `(${person.birthYear})`
+    : person.relation && person.relation !== "본인" ? person.relation : "";
+  return `
+    <g>
+      ${symbol}${inner}
+      <text class="name" x="${x}" y="${meta ? y - 2 : y + 7}" text-anchor="middle">${escapeHtml(clipText(displayName, 8))}</text>
+      ${meta ? `<text class="meta" x="${x}" y="${y + 27}" text-anchor="middle">${escapeHtml(meta)}</text>` : ""}
+    </g>
+  `;
+}
+
+function relationGroup(relation) {
+  const value = String(relation || "").replace(/\s+/g, "");
+  if (/^(부|모|아버지|어머니|부친|모친)$/.test(value)) return "parent";
+  if (/(형|제|누나|언니|오빠|동생|자매|형제)/.test(value)) return "sibling";
+  if (/(배우자|남편|아내)/.test(value)) return "spouse";
+  if (/(자녀|아들|딸|장남|차남|장녀|차녀)/.test(value)) return "child";
+  return "other";
 }
 
 function importRows(rows) {

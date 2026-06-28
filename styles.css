@@ -711,6 +711,100 @@ th {
   line-height: 1.45;
 }
 
+.genogram-dialog {
+  width: 920px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: var(--text);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.genogram-dialog::backdrop {
+  background: rgba(24, 33, 37, 0.46);
+}
+
+.genogram-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.genogram-dialog-head h3,
+.genogram-dialog-head p {
+  margin: 0;
+}
+
+.genogram-dialog-head p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.icon-button {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border-color: var(--line);
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.genogram-canvas {
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+  min-height: 360px;
+}
+
+.genogram-canvas svg {
+  display: block;
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+}
+
+.genogram-legend {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.genogram-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.genogram-legend i {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  border: 2px solid #4b5357;
+  background: #fff;
+}
+
+.genogram-legend .legend-circle {
+  border-radius: 50%;
+}
+
+.genogram-legend .legend-double {
+  border: 4px double var(--primary);
+}
+
 .policy-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
