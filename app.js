@@ -243,7 +243,7 @@ function initElementMap() {
     "processMonthlyStatus", "processRows", "selectAllProcessRecords",
     "programForm", "programId", "programName", "programCategory", "programManager",
     "programList",
-    "csvFile", "excelPaste", "includePersonalExport", "restoreJsonFile",
+    "csvFile", "excelPaste", "googleSheetPaste", "includePersonalExport", "restoreJsonFile",
     "toast"
   ].forEach((id) => { elements[id] = $(`#${id}`); });
 }
@@ -319,6 +319,7 @@ function bindEvents() {
   $("#downloadTemplate").addEventListener("click", downloadTemplate);
   $("#importCsv").addEventListener("click", importCsv);
   $("#importPastedExcel").addEventListener("click", importPastedExcel);
+  $("#importGoogleSheetClients").addEventListener("click", importGoogleSheetClients);
   $("#exportJson").addEventListener("click", exportJson);
   $("#restoreJsonButton").addEventListener("click", () => elements.restoreJsonFile.click());
   elements.restoreJsonFile.addEventListener("change", restoreJson);
@@ -1162,6 +1163,147 @@ function importPastedExcel() {
   }
   importRows(parseDelimited(text, "\t"));
   elements.excelPaste.value = "";
+}
+
+function importGoogleSheetClients() {
+  const text = elements.googleSheetPaste.value.trim();
+  if (!text) {
+    showToast("Google 시트에서 복사한 대상자 표를 붙여넣으세요.");
+    return;
+  }
+
+  const rows = parseDelimited(text, "\t");
+  const headerRowIndex = rows.findIndex((row) => {
+    const headers = row.map(normalizeSheetHeader);
+    return headers.includes("순번") && headers.includes("이름") && headers.includes("성별");
+  });
+  if (headerRowIndex < 0) {
+    showToast("순번, 이름, 성별 열이 있는 제목 행을 찾지 못했습니다.");
+    return;
+  }
+
+  const headers = rows[headerRowIndex].map(normalizeSheetHeader);
+  const columnIndex = (name) => headers.indexOf(name);
+  const valueAt = (row, name) => {
+    const index = columnIndex(name);
+    return index >= 0 ? String(row[index] || "").trim() : "";
+  };
+
+  let added = 0;
+  let updated = 0;
+  let currentClient = null;
+
+  rows.slice(headerRowIndex + 1).forEach((row) => {
+    const sequence = valueAt(row, "순번");
+    const familyName = valueAt(row, "가구원");
+    const relation = valueAt(row, "관계");
+
+    if (!sequence) {
+      if (!currentClient || !familyName || relation === "본인") return;
+      const familyLine = [
+        familyName,
+        valueAt(row, "성별"),
+        relation,
+        valueAt(row, "연령") ? `${valueAt(row, "연령")}세` : ""
+      ].filter(Boolean).join(" / ");
+      const members = currentClient.familyMembers
+        ? currentClient.familyMembers.split("\n")
+        : [];
+      if (familyLine && !members.includes(familyLine)) {
+        currentClient.familyMembers = [...members, familyLine].join("\n");
+      }
+      return;
+    }
+
+    const name = valueAt(row, "이름") || familyName;
+    if (!name) {
+      currentClient = null;
+      return;
+    }
+
+    const birthDate = valueAt(row, "생년월일");
+    const birthYear = birthDate.match(/^\d{4}/)?.[0] || "";
+    const sourceCode = `google-sheet-${sequence}`;
+    let client = state.clients.find((item) => item.code === sourceCode)
+      || state.clients.find((item) => item.name === name && (!birthYear || item.birthYear === birthYear));
+
+    const sheetValues = {
+      name,
+      code: sourceCode,
+      birthYear,
+      gender: valueAt(row, "성별"),
+      area: valueAt(row, "구역"),
+      housing: normalizeSheetHousing(valueAt(row, "주거형태")),
+      economic: normalizeSheetEconomic(valueAt(row, "경제사항")),
+      household: normalizeSheetHousehold(valueAt(row, "세대유형")),
+      sensitive: true
+    };
+
+    if (client) {
+      Object.entries(sheetValues).forEach(([key, value]) => {
+        if (value !== "") client[key] = value;
+      });
+      updated += 1;
+    } else {
+      client = normalizeClient({
+        ...sheetValues,
+        consentDate: "",
+        worker: "",
+        familyMembers: "",
+        genogramFile: null,
+        ecomapFile: null
+      });
+      state.clients.push(client);
+      added += 1;
+    }
+    currentClient = client;
+  });
+
+  if (!added && !updated) {
+    showToast("가져올 대상자 행을 찾지 못했습니다.");
+    return;
+  }
+
+  saveState("Google 시트 대상자 가져오기", `추가 ${added}명, 갱신 ${updated}명`);
+  elements.googleSheetPaste.value = "";
+  renderAll();
+  showToast(`대상자 ${added}명을 추가하고 ${updated}명을 갱신했습니다.`);
+}
+
+function normalizeSheetHeader(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeSheetHousing(value) {
+  if (!value) return "";
+  if (value.includes("영구")) return "영구임대";
+  if (value.includes("임대")) return "공공임대";
+  if (value.includes("전세")) return "전세";
+  if (value.includes("월세")) return "월세";
+  if (value.includes("자가")) return "자가";
+  return "기타";
+}
+
+function normalizeSheetEconomic(value) {
+  if (!value) return "";
+  if (value.includes("수급")) return "기초생활수급";
+  if (value.includes("차상위")) return "차상위";
+  if (value.includes("50%")) return "중위소득 50% 이하";
+  if (value.includes("부채") || value.includes("체납")) return "부채/체납";
+  if (value.includes("소득 없음")) return "소득 없음";
+  if (value.includes("저소득")) return "저소득";
+  return "확인 필요";
+}
+
+function normalizeSheetHousehold(value) {
+  if (!value) return "";
+  if (value.includes("독거")) return "1인가구";
+  if (value.includes("한부모")) return "한부모";
+  if (value.includes("조손")) return "조손가구";
+  if (value.includes("장애")) return "장애인가구";
+  if (value.includes("노인") || value.includes("부부")) return "노인가구";
+  if (value.includes("다문화")) return "다문화가구";
+  return "일반가구";
 }
 
 function importRows(rows) {
